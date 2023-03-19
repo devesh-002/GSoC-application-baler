@@ -48,6 +48,7 @@ def load_data(data_path: str):
 def find_minmax(data):
     data = np.array(data)
     data = list(data)
+    # print(data)
     true_max_list = np.apply_along_axis(np.max, axis=0, arr=data)
     true_min_list = np.apply_along_axis(np.min, axis=0, arr=data)
 

@@ -2,6 +2,10 @@ import torch
 import torch.nn as nn
 from tqdm import tqdm
 from torch.nn import functional as F
+from typing import List, Callable, Union, Any, TypeVar, Tuple
+
+# import torch.tensor as Tensor
+Tensor = TypeVar('torch.tensor')
 
 ###############################################
 factor = 0.5
@@ -29,12 +33,11 @@ def new_loss_func(model, reconstructed_data, true_data, reg_param, val):
     else:
         loss = mse_loss
         return loss
-
-
+    
 def sparse_loss_function_L1(
     model_children, true_data, reconstructed_data, reg_param, validate
 ):
-    mse = nn.MSELoss()
+    mse = nn.BCEWithLogitsLoss()
     mse_loss = mse(reconstructed_data, true_data)
 
     l1_loss = 0
@@ -49,6 +52,109 @@ def sparse_loss_function_L1(
     else:
         return mse_loss
 
+def vae_loss_function(model_children,recons,input,reg_weigh: int = 100,
+                    *args,
+                    **kwargs) -> dict:
+    # recons = args[0]
+    # input = args[1]
+    z = args[2]
+
+    batch_size = input.size(0)
+    bias_corr = batch_size * (batch_size - 1)
+    reg_weight = reg_weigh / bias_corr
+
+    recons_loss = F.mse_loss(recons, input)
+
+    mmd_loss = compute_mmd(z, reg_weight)
+
+    loss = recons_loss + mmd_loss
+    return  loss,  recons_loss, mmd_loss
+
+def compute_kernel(
+                    x1: Tensor,
+                    x2: Tensor,kernel_type='imq') -> Tensor:
+    # Convert the tensors into row and column vectors
+    D = x1.size(1)
+    N = x1.size(0)
+
+    x1 = x1.unsqueeze(-2)  # Make it into a column tensor
+    x2 = x2.unsqueeze(-3)  # Make it into a row tensor
+
+    """
+    Usually the below lines are not required, especially in our case,
+    but this is useful when x1 and x2 have different sizes
+    along the 0th dimension.
+    """
+    x1 = x1.expand(N, N, D)
+    x2 = x2.expand(N, N, D)
+
+    if kernel_type == 'rbf':
+        result = compute_rbf(x1, x2)
+    elif kernel_type == 'imq':
+        result = compute_inv_mult_quad(x1, x2)
+    else:
+        raise ValueError('Undefined kernel type.')
+
+    return result
+
+def compute_rbf(
+                x1: Tensor,
+                x2: Tensor,
+                eps: float = 1e-7,latent_var=2.0) -> Tensor:
+    """
+    Computes the RBF Kernel between x1 and x2.
+    :param x1: (Tensor)
+    :param x2: (Tensor)
+    :param eps: (Float)
+    :return:
+    """
+    z_dim = x2.size(-1)
+    sigma = 2. * z_dim * latent_var
+
+    result = torch.exp(-((x1 - x2).pow(2).mean(-1) / sigma))
+    return result
+
+def compute_inv_mult_quad(
+                            x1: Tensor,
+                            x2: Tensor,
+                            eps: float = 1e-7,latent_var=2.0) -> Tensor:
+    """
+    Computes the Inverse Multi-Quadratics Kernel between x1 and x2,
+    given by
+
+            k(x_1, x_2) = \sum \frac{C}{C + \|x_1 - x_2 \|^2}
+    :param x1: (Tensor)
+    :param x2: (Tensor)
+    :param eps: (Float)
+    :return:
+    """
+    z_dim = x2.size(-1)
+    C = 2 * z_dim * latent_var
+    kernel = C / (eps + C + (x1 - x2).pow(2).sum(dim=-1))
+
+    # Exclude diagonal elements
+    result = kernel.sum() - kernel.diag().sum()
+
+    return result
+
+def compute_mmd( z: Tensor, reg_weight: float) -> Tensor:
+    # Sample from prior (Gaussian) distribution
+    prior_z = torch.randn_like(z)
+
+    prior_z__kernel = compute_kernel(prior_z, prior_z)
+    z__kernel = compute_kernel(z, z)
+    priorz_z__kernel = compute_kernel(prior_z, z)
+
+    mmd = reg_weight * prior_z__kernel.mean() + \
+        reg_weight * z__kernel.mean() - \
+        2 * reg_weight * priorz_z__kernel.mean()
+    return mmd
+
+
+# def binary_loss(
+#     model_children, true_data, reconstructed_data, reg_param, validate
+#                 ):
+    
 
 # Accuracy function still WIP. Not working properly.
 # Probably has to do with total_correct counter.

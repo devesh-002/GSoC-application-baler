@@ -10,6 +10,18 @@ import modules.utils as utils
 
 import random
 import numpy as np
+from pytorch_lightning import Trainer
+
+# train_epoch_loss, mse_loss_fit, regularizer_loss_fit = fit(
+#     model=model,
+#     train_dl=train_dl,
+#     train_ds=train_ds,
+#     model_children=model_children,
+#     optimizer=optimizer,
+#     RHO=RHO,
+#     regular_param=reg_param,
+#     l1=l1,
+# )
 
 
 def fit(model, train_dl, train_ds, model_children, regular_param, optimizer, RHO, l1):
@@ -27,7 +39,7 @@ def fit(model, train_dl, train_ds, model_children, regular_param, optimizer, RHO
         inputs = inputs.to(model.device)
         optimizer.zero_grad()
         reconstructions = model(inputs)
-        loss, mse_loss, l1_loss = utils.sparse_loss_function_L1(
+        loss, mse_loss, l1_loss = utils.vae_loss_function(
             model_children=model_children,
             true_data=inputs,
             reconstructed_data=reconstructions,

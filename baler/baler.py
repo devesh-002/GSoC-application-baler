@@ -13,6 +13,7 @@ def main():
     if mode == "new_project":
         helper.create_new_project(project_name)
     elif mode == "preprocessing" or mode == "pp":
+        print(config.input_path)
         pre_processing(project_name, config.path_before_pre_processing, config.input_path)
     elif mode == "train":
         perform_training(config, project_path)
