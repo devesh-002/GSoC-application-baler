@@ -52,18 +52,16 @@ def sparse_loss_function_L1(
     else:
         return mse_loss
 
-def vae_loss_function(model_children,recons,input,reg_weigh: int = 100,
-                    *args,
-                    **kwargs) -> dict:
+def vae_loss_function(model_children,true_data,reconstructed_data,validate,encode,reg_param,reg_weigh: int = 100) -> dict:
     # recons = args[0]
     # input = args[1]
-    z = args[2]
-
-    batch_size = input.size(0)
+    # z = args[2]
+    z=encode
+    batch_size = 512
     bias_corr = batch_size * (batch_size - 1)
     reg_weight = reg_weigh / bias_corr
 
-    recons_loss = F.mse_loss(recons, input)
+    recons_loss = F.mse_loss(reconstructed_data, true_data)
 
     mmd_loss = compute_mmd(z, reg_weight)
 

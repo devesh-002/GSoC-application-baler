@@ -53,7 +53,7 @@ def perform_training(config, project_path):
     model = ModelObject(
         device=device, n_features=number_of_columns, z_dim=config.latent_space_size
     )
-
+    
     output_path = project_path + "training/"
     test_data_tensor, reconstructed_data_tensor = helper.train(
         model, number_of_columns, train_set_norm, test_set_norm, output_path, config

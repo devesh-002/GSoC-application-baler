@@ -43,7 +43,23 @@ class george_SAE(nn.Module):
 
     def forward(self, x):
         z = self.encode(x)
-        return self.decode(z)
+        return self.decode(z),z
+class CNN1(nn.Module):
+    def __init__(self, device, n_features, z_dim, hidden_dims: List = [ 64, 128, 256, 512], reg_weight: int = 100, kernel_type: str = 'imq', latent_var: float = 2., *args, **kwargs) -> None:
+
+        super().__init__()
+        self.z_dim = z_dim
+        self.n_features = n_features
+        self.device = device
+        self.hidden_dims = hidden_dims
+        self.reg_weight = reg_weight
+        self.kernel_type = kernel_type
+        self.latent_var = latent_var
+
+
+
+        self.cn1=nn.Conv1d()
+
 
 
 class devesh_VAE(nn.Module):
@@ -63,49 +79,49 @@ class devesh_VAE(nn.Module):
         
         in_channel = self.n_features
         for var in hidden_dims:
-            layers.append(nn.Sequential(nn.Conv1d(in_channel, out_channels=var, kernel_size=3, stride=2, padding=1,dtype=torch.float64,device=device),
+            layers.append(nn.Sequential(nn.Conv1d(in_channel, out_channels=var, kernel_size=3, stride=2, padding=1,dtype=torch.bfloat16,device=device),
                                         nn.BatchNorm1d(var),
                                         nn.LeakyReLU()
                                         ))
             
             in_channel = var
         self.encoder = nn.Sequential(*layers)
-        self.final_encode = nn.Linear(self.hidden_dims[-1]*4, self.z_dim,dtype=torch.float64,device=device)
+        self.final_encode = nn.Linear(self.hidden_dims[-1], self.z_dim,dtype=torch.bfloat16,device=device)
 
         # Decode
 
-        hidden_dims.reverse()
         layers = []
-        self.decode_in = nn.Linear(self.hidden_dims[-1]*4, self.z_dim,dtype=torch.float64)
+        self.decode_in = nn.Linear( self.z_dim,self.hidden_dims[-1],dtype=torch.bfloat16)
+        hidden_dims.reverse()
         for i in range(len(hidden_dims)-1):
             layers.append(nn.Sequential(
                 nn.ConvTranspose1d(hidden_dims[i], hidden_dims[i+1], kernel_size=3, stride=2,
-                                   padding=1, output_padding=1,dtype=torch.float64), nn.BatchNorm1d(hidden_dims[i+1]), nn.LeakyReLU()
+                                   padding=1, output_padding=1,dtype=torch.bfloat16), nn.BatchNorm1d(hidden_dims[i+1]), nn.LeakyReLU()
             ))
 
         self.decoder = nn.Sequential(*layers)
-        self.final_decode = nn.Sequential(nn.ConvTranspose1d(hidden_dims[-1], hidden_dims[-1],                                                  kernel_size=3,
+        self.final_decode = nn.Sequential(nn.ConvTranspose1d(hidden_dims[-1], hidden_dims[-1],                                                kernel_size=3,
                                                              stride=2,
                                                              padding=1,
                                                              output_padding=1),
                                           nn.BatchNorm1d(hidden_dims[-1]),
                                           nn.LeakyReLU(),
                                           nn.Conv1d(hidden_dims[-1], out_channels=3,
-                                                    kernel_size=3, padding=1,dtype=torch.float64),
+                                                    kernel_size=3, padding=1,dtype=torch.bfloat16),
                                           nn.Tanh())
 
-    def encode(self, x):
-        # print(x.shape)
-        
-        encode_layer=self.encoder(x)
-        print("OK")
+    def encode(self, x):        
+        encode_layer=self.encoder(x.to(dtype=torch.bfloat16))
         out=torch.flatten(encode_layer,start_dim=1)
 
         comp=self.final_encode(out)
         return comp
 
     def decode(self,x):
-        decode_in=self.decode_in(x).view(-1,512,2,2)
+        x=x.view(-1,1,4)
+        decode_in=self.decode_in(x)
+        sh=decode_in.shape
+        decode_in=decode_in.resize(512,8,8)
         main_decoder=self.decoder(decode_in)
         result=self.final_decode(main_decoder)
         return result

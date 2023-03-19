@@ -38,11 +38,12 @@ def fit(model, train_dl, train_ds, model_children, regular_param, optimizer, RHO
         counter += 1
         inputs = inputs.to(model.device)
         optimizer.zero_grad()
-        reconstructions = model(inputs)
+        reconstructions ,encode= model(inputs)
         loss, mse_loss, l1_loss = utils.vae_loss_function(
             model_children=model_children,
             true_data=inputs,
             reconstructed_data=reconstructions,
+            encode=encode,
             reg_param=regular_param,
             validate=False,
         )
@@ -70,13 +71,14 @@ def validate(model, test_dl, test_ds, model_children, reg_param):
         ):
             counter += 1
             inputs = inputs.to(model.device)
-            reconstructions = model(inputs)
-            loss = utils.sparse_loss_function_L1(
+            reconstructions,encode = model(inputs)
+            loss, mse_loss, l1_loss = utils.vae_loss_function(
                 model_children=model_children,
                 true_data=inputs,
                 reconstructed_data=reconstructions,
+                encode=encode,
                 reg_param=reg_param,
-                validate=True,
+                validate=False,
             )
             running_loss += loss.item()
 
@@ -94,7 +96,7 @@ def train(model, variables, train_data, test_data, parent_path, config):
     random.seed(0)
     torch.manual_seed(0)
     np.random.seed(0)
-    torch.use_deterministic_algorithms(True)
+    # torch.use_deterministic_algorithms(True)
     g = torch.Generator()
     g.manual_seed(0)
 
