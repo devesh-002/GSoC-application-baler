@@ -19,7 +19,7 @@ def analysis(project_name, data_path_before, data_path_after):
         after = pickle.load(handle)
 
     #plot_all(project_path, before, after)
-    variable = "M"
+    variable = "V2"
     plot_peak(project_path, before[variable], after[variable])
 
 def fit(x, a, b, c, k, m):

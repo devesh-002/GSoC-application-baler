@@ -16,13 +16,13 @@ def pre_processing(input_path,output_path):
     #     "recoGenJets_slimmedGenJets__PAT.obj.mJetArea",
     #     "recoGenJets_slimmedGenJets__PAT.obj.mPileupEnergy",
     #     "recoGenJets_slimmedGenJets__PAT.obj.mPassNumber"]
-    dropped_variables=['Type1','Type2']
+    dropped_variables=['Time']
     # Load data
     # test=uproot.open(input_path)[Branch][Collection][Objects]
 
     # rootFile = ROOT.TFile(input_path)
     # intree = rootFile.Get(Branch)
-    # arr = tree2array(intree,branches=names) 
+    # arr = tree2array(intree','branches=names) 
     # df_root_numpy = pd.DataFrame(arr)
 
     

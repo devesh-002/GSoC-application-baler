@@ -1,7 +1,7 @@
 
 def set_config(c):
     c.input_path          = "./data/example/example.pickle"
-    c.path_before_pre_processing = "/home/devesh/GSoC-application-baler/data/example/MuRun2010B.csv"
+    c.path_before_pre_processing = "/home/devesh/GSoC-application-baler/data/example/creditcard.csv"
     c.compression_ratio   = 2.0
     c.epochs              = 10
     c.early_stopping      = False
