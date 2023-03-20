@@ -5,7 +5,11 @@ from torch.nn import functional as F
 from typing import List, Callable, Union, Any, TypeVar, Tuple
 
 # import torch.tensor as Tensor
+# import modules.helper as helper
+
+# import torch.tensor as Tensor
 Tensor = TypeVar('torch.tensor')
+# config, mode, project_name = helper.get_arguments()
 
 ###############################################
 factor = 0.5
@@ -37,7 +41,7 @@ def new_loss_func(model, reconstructed_data, true_data, reg_param, val):
 def sparse_loss_function_L1(
     model_children, true_data, reconstructed_data, reg_param, validate
 ):
-    mse = nn.BCEWithLogitsLoss()
+    mse = nn.MSELoss()
     mse_loss = mse(reconstructed_data, true_data)
 
     l1_loss = 0
@@ -147,6 +151,60 @@ def compute_mmd( z: Tensor, reg_weight: float) -> Tensor:
         reg_weight * z__kernel.mean() - \
         2 * reg_weight * priorz_z__kernel.mean()
     return mmd
+
+def swae_loss_function(model_children,            true_data,
+            reconstructed_data,
+            encode,
+            reg_param,z_dim
+,p=2.0,reg_weight=100,validate=False) -> dict:
+    recons = true_data
+    input = reconstructed_data
+    z = encode
+
+    batch_size = input.size(0)
+    bias_corr = batch_size *  (batch_size - 1)
+    reg_weight = reg_weight / bias_corr
+
+    recons_loss_l2 = F.mse_loss(recons, input)
+    recons_loss_l1 = F.l1_loss(recons, input)
+
+    swd_loss = compute_swd(z,  reg_weight,z_dim)
+
+    loss = recons_loss_l2 + recons_loss_l1 + swd_loss
+    return  loss, recons_loss_l2 + recons_loss_l1,  swd_loss
+
+def get_random_projections(latent_dim: int, num_samples: int,proj_dist='normal') -> Tensor:
+
+    if proj_dist == 'normal':
+        rand_samples = torch.randn(num_samples, latent_dim)
+    elif proj_dist == 'cauchy':
+        rand_samples = dist.Cauchy(torch.tensor([0.0]),
+                                    torch.tensor([1.0])).sample((num_samples, latent_dim)).squeeze()
+    else:
+        raise ValueError('Unknown projection distribution.')
+
+    rand_proj = rand_samples / rand_samples.norm(dim=1).view(-1,1)
+    return rand_proj # [S x D]
+
+
+def compute_swd(   z: Tensor,
+                reg_weight,z_dim,num_projections=50,p=2) -> Tensor:
+
+    prior_z = torch.randn_like(z) # [N x D]
+    device = z.device
+
+    proj_matrix = get_random_projections(z_dim,
+                                                num_samples=num_projections).transpose(0,1).to(device)
+
+    latent_projections = z.matmul(proj_matrix.double()) # [N x S]
+    prior_projections = prior_z.matmul(proj_matrix.double()) # [N x S]
+
+    # The Wasserstein distance is computed by sorting the two projections
+    # across the batches and computing their element-wise l2 distance
+    w_dist = torch.sort(latent_projections.t(), dim=1)[0] - \
+                torch.sort(prior_projections.t(), dim=1)[0]
+    w_dist = w_dist.pow(p)
+    return reg_weight * w_dist.mean()
 
 
 # def binary_loss(

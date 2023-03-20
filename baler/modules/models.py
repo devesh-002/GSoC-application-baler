@@ -2,8 +2,14 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 from typing import List, Callable, Union, Any, TypeVar, Tuple
+from torch import distributions as dist
+from torch.autograd import Variable
+import numpy as np
 # import torch.tensor as Tensor
-Tensor = TypeVar('torch.tensor')
+# Tensor = TypeVar('torch.tensor')
+cuda = True if torch.cuda.is_available() else False
+
+Tensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
 
 
 class george_SAE(nn.Module):
@@ -44,92 +50,10 @@ class george_SAE(nn.Module):
     def forward(self, x):
         z = self.encode(x)
         return self.decode(z),z
-class CNN1(nn.Module):
-    def __init__(self, device, n_features, z_dim, hidden_dims: List = [ 64, 128, 256, 512], reg_weight: int = 100, kernel_type: str = 'imq', latent_var: float = 2., *args, **kwargs) -> None:
-
-        super().__init__()
-        self.z_dim = z_dim
-        self.n_features = n_features
-        self.device = device
-        self.hidden_dims = hidden_dims
-        self.reg_weight = reg_weight
-        self.kernel_type = kernel_type
-        self.latent_var = latent_var
 
 
 
-        self.cn1=nn.Conv1d()
 
-
-
-class devesh_VAE(nn.Module):
-
-    def __init__(self, device, n_features, z_dim, hidden_dims: List = [ 64, 128, 256, 512], reg_weight: int = 100, kernel_type: str = 'imq', latent_var: float = 2., *args, **kwargs) -> None:
-
-        super().__init__()
-        self.z_dim = z_dim
-        self.n_features = n_features
-        self.device = device
-        self.hidden_dims = hidden_dims
-        self.reg_weight = reg_weight
-        self.kernel_type = kernel_type
-        self.latent_var = latent_var
-
-        layers = []
-        
-        in_channel = self.n_features
-        for var in hidden_dims:
-            layers.append(nn.Sequential(nn.Conv1d(in_channel, out_channels=var, kernel_size=3, stride=2, padding=1,dtype=torch.bfloat16,device=device),
-                                        nn.BatchNorm1d(var),
-                                        nn.LeakyReLU()
-                                        ))
-            
-            in_channel = var
-        self.encoder = nn.Sequential(*layers)
-        self.final_encode = nn.Linear(self.hidden_dims[-1], self.z_dim,dtype=torch.bfloat16,device=device)
-
-        # Decode
-
-        layers = []
-        self.decode_in = nn.Linear( self.z_dim,self.hidden_dims[-1],dtype=torch.bfloat16)
-        hidden_dims.reverse()
-        for i in range(len(hidden_dims)-1):
-            layers.append(nn.Sequential(
-                nn.ConvTranspose1d(hidden_dims[i], hidden_dims[i+1], kernel_size=3, stride=2,
-                                   padding=1, output_padding=1,dtype=torch.bfloat16), nn.BatchNorm1d(hidden_dims[i+1]), nn.LeakyReLU()
-            ))
-
-        self.decoder = nn.Sequential(*layers)
-        self.final_decode = nn.Sequential(nn.ConvTranspose1d(hidden_dims[-1], hidden_dims[-1],                                                kernel_size=3,
-                                                             stride=2,
-                                                             padding=1,
-                                                             output_padding=1),
-                                          nn.BatchNorm1d(hidden_dims[-1]),
-                                          nn.LeakyReLU(),
-                                          nn.Conv1d(hidden_dims[-1], out_channels=3,
-                                                    kernel_size=3, padding=1,dtype=torch.bfloat16),
-                                          nn.Tanh())
-
-    def encode(self, x):        
-        encode_layer=self.encoder(x.to(dtype=torch.bfloat16))
-        out=torch.flatten(encode_layer,start_dim=1)
-
-        comp=self.final_encode(out)
-        return comp
-
-    def decode(self,x):
-        x=x.view(-1,1,4)
-        decode_in=self.decode_in(x)
-        sh=decode_in.shape
-        decode_in=decode_in.resize(512,8,8)
-        main_decoder=self.decoder(decode_in)
-        result=self.final_decode(main_decoder)
-        return result
-    def forward(self,input):
-        input=input.resize(int(input.shape[0]/8),8,input.shape[-1])
-        compressed=self.encode(input)
-        return self.decode(compressed)
-    
         
 class george_SAE_BN(nn.Module):
     def __init__(self,device, n_features, z_dim):
@@ -300,6 +224,7 @@ class george_SAE_Dropout(nn.Module):
 
     def forward(self, x):
         # z = x.view(batch_size,a,b,c) ? What is this
+        x= self.encode(x)
         return self.decode(x)
 
     def loss(self, model_children, true_data, reconstructed_data, reg_param):
@@ -313,224 +238,138 @@ class george_SAE_Dropout(nn.Module):
         loss = mse_loss + reg_param * l1_loss
         return loss
 
+# def reparameterization(mu, logvar,z_dim):
+#     std = torch.exp(logvar / 2)
+#     sampled_z = Variable(Tensor(np.random.normal(0, 1, (mu.size(0), z_dim))))
+#     z = sampled_z * std + mu
+#     return z
 
-class WAE_MMD():
 
-    def __init__(self,
-                 in_channels: int,
-                 latent_dim: int,
-                 hidden_dims: List = None,
-                 reg_weight: int = 100,
-                 kernel_type: str = 'imq',
-                 latent_var: float = 2.,
-                 **kwargs) -> None:
-        super(WAE_MMD, self).__init__()
+# class AAE(nn.Module):
+# class Encoder(nn.Module):
+#     def __init__(self, device, n_features, z_dim, *args, **kwargs):
+#         super().__init__(*args, **kwargs)
+#         self.z_dim=z_dim
+#         self.device = device
 
-        self.latent_dim = latent_dim
-        self.reg_weight = reg_weight
-        self.kernel_type = kernel_type
-        self.z_var = latent_var
+#         # encoder
+#         self.en1 = nn.Linear(
+#             n_features, 200, dtype=torch.float64, device=device)
+#         self.en2 = nn.Linear(200, 100, dtype=torch.float64, device=device)
+#         self.en3 = nn.Linear(100, 50, dtype=torch.float64, device=device)
+#         self.en4 = nn.Linear(50, z_dim, dtype=torch.float64, device=device)
+#         # self.mu = nn.Linear(50, z_dim,dtype=torch.float64, device=device)
+#         # self.logvar = nn.Linear(50, z_dim, dtype=torch.float64, device=device)
 
-        modules = []
-        if hidden_dims is None:
-            hidden_dims = [32, 64, 128, 256, 512]
 
-        # Build Encoder
-        for h_dim in hidden_dims:
-            modules.append(
-                nn.Sequential(
-                    nn.Conv2d(in_channels, out_channels=h_dim,
-                              kernel_size=3, stride=2, padding=1),
-                    nn.BatchNorm2d(h_dim),
-                    nn.LeakyReLU())
-            )
-            in_channels = h_dim
+#     def forward(self, x):
+#         h1 = F.relu(self.en1(x))
+#         h2 = F.relu(self.en2(h1))
+#         h3 = F.relu(self.en3(h2))
+#         # mu=self.mu(h3)
+#         # log=self.logvar(h3)
+#         # return reparameterization(mu,log,self.z_dim)
+#         return self.en4(h3)
 
-        self.encoder = nn.Sequential(*modules)
-        self.fc_z = nn.Linear(hidden_dims[-1]*4, latent_dim)
+# class Discriminator(nn.Module):
+#     def __init__(self, device, n_features, z_dim, *args, **kwargs):
+#         super().__init__(*args, **kwargs)
 
-        # Build Decoder
-        modules = []
+#         self.device = device
+#         self.gn1=nn.Linear(z_dim,30, dtype=torch.float64, device=device)
+#         self.gn2=nn.Linear(30,30, dtype=torch.float64, device=device)
+#         self.gn3=nn.Linear(30,z_dim, dtype=torch.float64, device=device)
 
-        self.decoder_input = nn.Linear(latent_dim, hidden_dims[-1] * 4)
+#     def forward(self,x):
+#         g1=F.relu(self.gn1(x))
+#         g2=F.relu(self.gn2(g1))
+#         return self.gn3(g2)
 
-        hidden_dims.reverse()
+# class Decoder(nn.Module):
+#     def __init__(self, device, n_features, z_dim, *args, **kwargs):
+#         super().__init__(*args, **kwargs)
 
-        for i in range(len(hidden_dims) - 1):
-            modules.append(
-                nn.Sequential(
-                    nn.ConvTranspose2d(hidden_dims[i],
-                                       hidden_dims[i + 1],
-                                       kernel_size=3,
-                                       stride=2,
-                                       padding=1,
-                                       output_padding=1),
-                    nn.BatchNorm2d(hidden_dims[i + 1]),
-                    nn.LeakyReLU())
-            )
+#         self.device = device
+#         self.de1 = nn.Linear(z_dim, 50, dtype=torch.float64, device=device)
+#         self.de2 = nn.Linear(50, 100, dtype=torch.float64, device=device)
+#         self.de3 = nn.Linear(100, 200, dtype=torch.float64, device=device)
+#         self.de4 = nn.Linear(
+#             200, n_features, dtype=torch.float64, device=device)
 
-        self.decoder = nn.Sequential(*modules)
+#         self.n_features = n_features
+#         self.z_dim = z_dim
 
-        self.final_layer = nn.Sequential(
-            nn.ConvTranspose2d(hidden_dims[-1],
-                               hidden_dims[-1],
-                               kernel_size=3,
-                               stride=2,
-                               padding=1,
-                               output_padding=1),
-            nn.BatchNorm2d(hidden_dims[-1]),
-            nn.LeakyReLU(),
-            nn.Conv2d(hidden_dims[-1], out_channels=3,
-                      kernel_size=3, padding=1),
-            nn.Tanh())
 
-    def encode(self, input: Tensor) -> Tensor:
-        """
-        Encodes the input by passing through the encoder network
-        and returns the latent codes.
-        :param input: (Tensor) Input tensor to encoder [N x C x H x W]
-        :return: (Tensor) List of latent codes
-        """
-        result = self.encoder(input)
-        result = torch.flatten(result, start_dim=1)
+#     def forward(self, z):
 
-        # Split the result into mu and var components
-        # of the latent Gaussian distribution
-        z = self.fc_z(result)
+#         h4 = F.relu(self.de1(z))
+#         h5 = F.relu(self.de2(h4))
+#         h6 = F.relu(self.de3(h5))
+#         out = self.de4(h6)
+#         return out
+
+class Encoder(nn.Module):
+    def __init__(self, device, n_features, z_dim, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.z_dim=z_dim
+        self.device = device
+
+        self.en1 = nn.Linear(
+            n_features, 200, dtype=torch.float64, device=device)
+        self.en2 = nn.Linear(200, 100, dtype=torch.float64, device=device)
+        self.en3 = nn.Linear(100, 50, dtype=torch.float64, device=device)
+        # self.flat = nn.Flatten()
+        self.linear = nn.Linear(50, self.z_dim,dtype=torch.float64, device=device)
+
+    def forward(self, x):
+        convolution1 = F.relu(self.en1(x))
+        convolution2 = F.relu(self.en2(convolution1))
+        convolution3 = F.relu(self.en3(convolution2))
+        z = self.linear(convolution3)
+
         return z
 
-    def decode(self, z: Tensor) -> Tensor:
-        result = self.decoder_input(z)
-        result = result.view(-1, 512, 2, 2)
-        result = self.decoder(result)
-        result = self.final_layer(result)
-        return result
+class Decoder(nn.Module):
+    def __init__(self, device, n_features, z_dim, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.z_dim=z_dim
+        self.device = device
+        self.de1 = nn.Linear(z_dim, 50, dtype=torch.float64, device=device)
+        self.de2 = nn.Linear(50, 100, dtype=torch.float64, device=device)
+        self.de3 = nn.Linear(100, 200, dtype=torch.float64, device=device)
+        self.de4 = nn.Linear(
+            200, n_features, dtype=torch.float64, device=device)
 
-    def forward(self, input: Tensor, **kwargs):
-        z = self.encode(input)
-        return [self.decode(z), input, z]
+    def forward(self, z):
 
-    def loss_function(self,
-                      *args,
-                      **kwargs) -> dict:
-        recons = args[0]
-        input = args[1]
-        z = args[2]
+        h4 = F.relu(self.de1(z))
+        h5 = F.relu(self.de2(h4))
+        h6 = F.relu(self.de3(h5))
+        out = self.de4(h6)
+        predicted = torch.tanh(out)
+        return predicted
 
-        batch_size = input.size(0)
-        bias_corr = batch_size * (batch_size - 1)
-        reg_weight = self.reg_weight / bias_corr
+class Discriminator(nn.Module):
+    def __init__(self, device, n_features, z_dim, dim_h=3,*args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.z_dim=z_dim
+        self.device = device
+        
+        self.dim_z = z_dim
+        self.dim_h = dim_h
+        self.network = []
+        self.network.extend([
+            nn.Linear(self.dim_z, self.dim_h,dtype=torch.float64, device=device),
+            nn.ReLU(),
+            nn.Linear(self.dim_h, self.dim_h,dtype=torch.float64, device=device),
+            nn.ReLU(),
+            nn.Linear(self.dim_h,1,dtype=torch.float64, device=device),
+            nn.Sigmoid(),
+        ])
+        self.network = nn.Sequential(*self.network)
 
-        recons_loss = F.mse_loss(recons, input)
+    def forward(self, z):
+        disc = self.network(z)
 
-        mmd_loss = self.compute_mmd(z, reg_weight)
+        return disc
 
-        loss = recons_loss + mmd_loss
-        return {'loss': loss, 'Reconstruction_Loss': recons_loss, 'MMD': mmd_loss}
-
-    def compute_kernel(self,
-                       x1: Tensor,
-                       x2: Tensor) -> Tensor:
-        # Convert the tensors into row and column vectors
-        D = x1.size(1)
-        N = x1.size(0)
-
-        x1 = x1.unsqueeze(-2)  # Make it into a column tensor
-        x2 = x2.unsqueeze(-3)  # Make it into a row tensor
-
-        """
-        Usually the below lines are not required, especially in our case,
-        but this is useful when x1 and x2 have different sizes
-        along the 0th dimension.
-        """
-        x1 = x1.expand(N, N, D)
-        x2 = x2.expand(N, N, D)
-
-        if self.kernel_type == 'rbf':
-            result = self.compute_rbf(x1, x2)
-        elif self.kernel_type == 'imq':
-            result = self.compute_inv_mult_quad(x1, x2)
-        else:
-            raise ValueError('Undefined kernel type.')
-
-        return result
-
-    def compute_rbf(self,
-                    x1: Tensor,
-                    x2: Tensor,
-                    eps: float = 1e-7) -> Tensor:
-        """
-        Computes the RBF Kernel between x1 and x2.
-        :param x1: (Tensor)
-        :param x2: (Tensor)
-        :param eps: (Float)
-        :return:
-        """
-        z_dim = x2.size(-1)
-        sigma = 2. * z_dim * self.z_var
-
-        result = torch.exp(-((x1 - x2).pow(2).mean(-1) / sigma))
-        return result
-
-    def compute_inv_mult_quad(self,
-                              x1: Tensor,
-                              x2: Tensor,
-                              eps: float = 1e-7) -> Tensor:
-        """
-        Computes the Inverse Multi-Quadratics Kernel between x1 and x2,
-        given by
-
-                k(x_1, x_2) = \sum \frac{C}{C + \|x_1 - x_2 \|^2}
-        :param x1: (Tensor)
-        :param x2: (Tensor)
-        :param eps: (Float)
-        :return:
-        """
-        z_dim = x2.size(-1)
-        C = 2 * z_dim * self.z_var
-        kernel = C / (eps + C + (x1 - x2).pow(2).sum(dim=-1))
-
-        # Exclude diagonal elements
-        result = kernel.sum() - kernel.diag().sum()
-
-        return result
-
-    def compute_mmd(self, z: Tensor, reg_weight: float) -> Tensor:
-        # Sample from prior (Gaussian) distribution
-        prior_z = torch.randn_like(z)
-
-        prior_z__kernel = self.compute_kernel(prior_z, prior_z)
-        z__kernel = self.compute_kernel(z, z)
-        priorz_z__kernel = self.compute_kernel(prior_z, z)
-
-        mmd = reg_weight * prior_z__kernel.mean() + \
-            reg_weight * z__kernel.mean() - \
-            2 * reg_weight * priorz_z__kernel.mean()
-        return mmd
-
-    def sample(self,
-               num_samples: int,
-               current_device: int, **kwargs) -> Tensor:
-        """
-        Samples from the latent space and return the corresponding
-        image space map.
-        :param num_samples: (Int) Number of samples
-        :param current_device: (Int) Device to run the model
-        :return: (Tensor)
-        """
-        z = torch.randn(num_samples,
-                        self.latent_dim)
-
-        z = z.to(current_device)
-
-        samples = self.decode(z)
-        return samples
-
-    def generate(self, x: Tensor, **kwargs) -> Tensor:
-        """
-        Given an input image x, returns the reconstructed image
-        :param x: (Tensor) [B x C x H x W]
-        :return: (Tensor) [B x C x H x W]
-        """
-
-        return self.forward(x)[0]

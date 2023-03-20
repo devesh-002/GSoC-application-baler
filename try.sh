@@ -1,3 +1,3 @@
-rm -rf /home/devesh/GSoC-application-baler/projects/given_proj/compressed_output/*
-rm -rf /home/devesh/GSoC-application-baler/projects/given_proj/decompressed_output/*
-rm -rf /home/devesh/GSoC-application-baler/projects/given_proj/model/*
+rm -rf ./GSoC-application-baler/projects/$1/compressed_output/*
+rm -rf ./GSoC-application-baler/projects/$1/decompressed_output/*
+rm -rf ./GSoC-application-baler/projects/$1/model/*

@@ -306,6 +306,8 @@ def renormalize(data, true_min_list, feature_range_list):
 
 
 def train(model, number_of_columns, train_set, test_set, project_path, config):
+    if(config.model_name=="adversial"):
+        return (training.adversial_training(train_set,test_set,project_path,config))
     return training.train(
         model, number_of_columns, train_set, test_set, project_path, config
     )
@@ -341,7 +343,11 @@ def compress(model_path, config):
     data = normalize(data, config.custom_norm, cleared_col_names)
     
     # Initialise and load the model correctly.
-    ModelObject = data_processing.initialise_model(config.model_name)
+    model_name=config.model_name
+    if(model_name=="adversial"):
+        model_name="Encoder"
+
+    ModelObject = data_processing.initialise_model(model_name)
     model = data_processing.load_model(
         ModelObject,
         model_path=model_path,
@@ -349,12 +355,16 @@ def compress(model_path, config):
         z_dim=config.latent_space_size,
     )
     data_tensor = numpy_to_tensor(data).to(model.device)
-
-    compressed = model.encode(data_tensor)
+    if(model_name=="Encoder"):
+        compressed=model(data_tensor)
+    else:
+        compressed = model.encode(data_tensor)
     return compressed, data_before, cleared_col_names
 
 
 def decompress(model_path, input_path, model_name):
+    if(model_name=="adversial"):
+        model_name="Decoder"
 
     # Load the data & convert to tensor
     data = data_loader(input_path)
@@ -372,7 +382,12 @@ def decompress(model_path, input_path, model_name):
         z_dim=latent_space_size,
     )
     data_tensor = numpy_to_tensor(data).to(model.device)
-    decompressed = model.decode(data_tensor)
+
+    if(model_name=="Decoder"):
+        decompressed=model(data_tensor)
+    else:
+        decompressed = model.decode(data_tensor)
+
     return decompressed
 
 

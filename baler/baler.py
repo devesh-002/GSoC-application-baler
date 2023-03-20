@@ -46,21 +46,37 @@ def perform_training(config, project_path):
     except AttributeError:
         print(config.latent_space_size,config.number_of_columns)
         assert(number_of_columns==config.number_of_columns)
+    output_path = project_path + "training/"
 
     device = helper.get_device()
+    train_set, test_set, number_of_columns, normalization_features, cleared_col_names = helper.process(config.input_path,config.test_size)
 
-    ModelObject = helper.model_init(config.model_name)
-    model = ModelObject(
-        device=device, n_features=number_of_columns, z_dim=config.latent_space_size
+    if(config.model_name=="adversial"):
+            model,decoder,discriminator,test_data_tensor, reconstructed_data_tensor= helper.train(
+        None, number_of_columns, train_set_norm, test_set_norm, output_path, config
     )
-    
-    output_path = project_path + "training/"
-    test_data_tensor, reconstructed_data_tensor = helper.train(
+            post_train(model,config,output_path,project_path,test_data_tensor, reconstructed_data_tensor,normalization_features,cleared_col_names,decoder,discriminator)
+
+    else:
+        ModelObject = helper.model_init(config.model_name)
+        model = ModelObject(
+            device=device, n_features=number_of_columns, z_dim=config.latent_space_size
+        )
+        test_data_tensor, reconstructed_data_tensor = helper.train(
         model, number_of_columns, train_set_norm, test_set_norm, output_path, config
     )
+
+        post_train(model,config,output_path,project_path,test_data_tensor, reconstructed_data_tensor,normalization_features,cleared_col_names)
+
+def post_train(model,config,output_path,project_path,test_data_tensor, reconstructed_data_tensor,normalization_features,cleared_col_names,decoder=None,discriminator=None):
+    print(len(reconstructed_data_tensor))
+
     test_data = helper.detach(test_data_tensor)
-    reconstructed_data = helper.detach(reconstructed_data_tensor)
-    
+    try:
+        reconstructed_data = helper.detach(reconstructed_data_tensor)
+    except:
+        reconstructed_data = helper.detach(reconstructed_data_tensor[0])
+
     print("Un-normalzing...")
     start = time.time()
     test_data_renorm = helper.renormalize(
@@ -79,8 +95,13 @@ def perform_training(config, project_path):
     helper.to_pickle(test_data_renorm, output_path + "before.pickle")
     helper.to_pickle(reconstructed_data_renorm, output_path + "after.pickle")
     normalization_features.to_csv(project_path + "model/cms_normalization_features.csv")
-    helper.model_saver(model, project_path + "model/model.pt")
     helper.to_pickle(cleared_col_names,project_path+"compressed_output/column_names.pickle")
+    if(config.model_name=="adversial"):
+        helper.model_saver(model,project_path+"model/model.pt")
+        helper.model_saver(decoder,project_path+"model/decoder.pt")
+        helper.model_saver(discriminator,project_path+"model/discriminator.pt")
+    else:
+        helper.model_saver(model, project_path + "model/model.pt")
 
 
 def perform_plotting(project_path, config):
@@ -109,11 +130,17 @@ def perform_compression(config, project_path):
 
 
 def perform_decompression(save_as_root, model_name, project_path):
+    config, _, _ = helper.get_arguments()
+
     print("Decompressing...")
     cleared_col_names = helper.from_pickle(project_path+"compressed_output/column_names.pickle")
     start = time.time()
+    model_path=project_path + "model/model.pt"
+    if(config.model_name=="adversial"):
+            print("hi")
+            model_path=project_path+"model/decoder.pt"
     decompressed = helper.decompress(
-        model_path=project_path + "model/model.pt",
+        model_path=model_path,
         input_path=project_path + "compressed_output/compressed.pickle",
         model_name=model_name,
     )
